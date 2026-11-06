@@ -21,6 +21,7 @@ Al entrar, la pantalla principal es directamente el mapa interactivo en tiempo r
 Toda la experiencia ocurre sobre el mapa interactivo:
 
 1. **Vista Principal (Mapa en Vivo):** Al abrir la web, solicita permiso GPS, centra el mapa en la ciudad del usuario y carga todos los reportes activos cercanos. Permite filtrar rápidamente entre "Todos", "Perdidos" y "Avistados".
+   * **Panel "Ver lista"** (botón inferior izquierdo, `ListaReportesSheet.tsx`): cuando hay muchos puntos, tocar pin por pin no escala. Pestañas **Perdidos / Avistados** (abre en Avistados si ese es el filtro superior activo), buscador (nombre/descripción, sin importar tildes ni mayúsculas) y filtro Todas / Perros / Gatos. Al elegir una mascota, el mapa vuela a su pin y se abre su detalle.
 2. **Flujo 1 - Reportar Avistamiento ("Vi una mascota"):**
    * Botón flotante abre un modal rápido (Drawer/Bottom Sheet).
    * El usuario sube/toma foto, confirma su ubicación GPS actual en el mapa, añade un comentario corto y publica.
@@ -47,6 +48,9 @@ Todo el stack es gratuito o tiene un plan gratis suficiente para un proyecto sin
   * `GeoJSON` (`Point` e índice `2dsphere`) para coordenadas `[longitud, latitud]` y consultas con `$nearSphere`.
   * `MongoDB Atlas Vector Search` (disponible en M0) para buscar similitud de coseno entre los embeddings de las fotos.
 * **Imágenes:** Cloudinary (con compresión en el cliente antes de subir para ahorrar datos móviles).
+  * La foto se sube **a través del backend** (`multer` en memoria, máx 5 MB, se revisan los primeros bytes para confirmar que es imagen) → `cloudinary.uploader.upload_stream` a la carpeta `pet-found/reportes`. Así el backend tiene los bytes para el embedding de la Fase 3.
+  * Cliente: `browser-image-compression` (800 px, calidad 0.8, WebP o JPEG si el navegador no codifica WebP) en `frontend/src/lib/comprimirFoto.ts`.
+* **Validación backend:** `zod` para la entrada HTTP (`backend/src/validation/reporte.js`) + Mongoose `strict: 'throw'`. Errores `{ ok:false, error, campos }` en español. `helmet`, CORS por `CORS_ORIGIN` y `express-rate-limit` (10 publicaciones/15 min por IP mientras no haya login).
 * **IA de Reconocimiento:** **`@huggingface/transformers` v3** (sucesor oficial de `@xenova/transformers`) con un modelo **CLIP** (ej. `Xenova/clip-vit-base-patch32`), ejecutándose en el backend para generar los vectores gratis sin pagar APIs externas. CLIP está hecho para comparar imágenes por similitud, por eso se prefiere sobre MobileNet.
 * **Autenticación:** **Firebase Auth** (Google Sign-In, plan Spark gratis y sin pausas por inactividad). El backend valida el ID token con `firebase-admin`.
 
@@ -83,12 +87,14 @@ El tipo TypeScript espejo vive en `frontend/src/types/reporte.ts`.
 ## 8. Prevención de Errores Comunes (Guardrails Técnicos)
 1. **Trampa de Coordenadas (Leaflet vs MongoDB):** Leaflet usa `[latitud, longitud]` en el frontend, pero MongoDB GeoJSON exige estrictamente `[longitud, latitud]`. Usa SIEMPRE las utilidades `toLeaflet` / `toGeoJSON` / `toGeoPoint` de `frontend/src/lib/geo.ts` y `backend/src/utils/geo.js` (con tests en `backend/src/utils/geo.test.js`).
 2. **Bug de Iconos en React-Leaflet:** Al empaquetar con Vite, los iconos por defecto de Leaflet se rompen. Usar solo los `L.divIcon` con clases de Tailwind de `frontend/src/components/map/markerIcons.ts` (pin rojo pulsante para perdidos y verde para avistados). Nunca `L.Icon.Default`.
-3. **Leaflet tapa los overlays:** los paneles de Leaflet usan z-index 400–1000. El contenedor del mapa usa `isolate` para que FAB, filtros y Drawers queden siempre encima.
-4. **Compresión en el Cliente:** Antes de enviar cualquier foto al backend/Cloudinary, comprímela en el navegador (usando `browser-image-compression`) a un máximo de 800px de ancho y formato WebP/JPEG al 80% de calidad. La app debe funcionar rápido con señal 3G/4G inestable.
-5. **Fricción Cero en Autenticación:** No obligues a crear cuenta con contraseña para mirar el mapa. Usa Firebase Auth (Google Sign-In) solo en el momento en que el usuario intenta publicar un reporte.
+3. **Conexión a Atlas en Windows:** en esta máquina Node toma `127.0.0.1` como DNS y la búsqueda SRV de `mongodb+srv://` falla (`querySrv ECONNREFUSED`). `backend/src/db/conexion.js` reintenta solo en ese caso con 1.1.1.1/8.8.8.8. Si la URI no trae base, usa `mascotas` (no `test`).
+4. **Teselas en señal inestable:** `MapaPrincipal.tsx` reintenta hasta 2 veces cada tesela que falla (Leaflet por defecto la deja en blanco).
+5. **Leaflet tapa los overlays:** los paneles de Leaflet usan z-index 400–1000. El contenedor del mapa usa `isolate` para que FAB, filtros y Drawers queden siempre encima.
+6. **Compresión en el Cliente:** Antes de enviar cualquier foto al backend/Cloudinary, comprímela en el navegador (usando `browser-image-compression`) a un máximo de 800px de ancho y formato WebP/JPEG al 80% de calidad. La app debe funcionar rápido con señal 3G/4G inestable.
+7. **Fricción Cero en Autenticación:** No obligues a crear cuenta con contraseña para mirar el mapa. Usa Firebase Auth (Google Sign-In) solo en el momento en que el usuario intenta publicar un reporte.
 
 ## 9. Variables de Entorno (.env.example)
-- Backend (`backend/.env.example`): `PORT`, `MONGODB_URI`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`.
+- Backend (`backend/.env.example`): `PORT`, `CORS_ORIGIN`, `MONGODB_URI`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`. `backend/src/config/env.js` las valida al arrancar.
 - Frontend (`frontend/.env.example`): `VITE_API_URL`, `VITE_DEFAULT_LAT`, `VITE_DEFAULT_LNG` (centrar mapa por defecto en `[-35.333, -72.416]`), `VITE_CARTO_API_KEY`.
 - Fase 4 agregará las llaves públicas de Firebase (`VITE_FIREBASE_*`) y la cuenta de servicio en el backend.
 
@@ -96,13 +102,15 @@ El tipo TypeScript espejo vive en `frontend/src/types/reporte.ts`.
 Avanza estrictamente en este orden y espera confirmación entre cada fase:
 
 - **Fase 1 (Esqueleto y Mapa Mock) — ✅ hecha:** Monorepo (`/frontend` y `/backend`), mapa a pantalla completa con `react-leaflet` + CARTO Voyager, 3 mascotas de prueba (hardcoded, en formato GeoJSON) con círculos de radio, filtros, FAB expandible y bottom sheet de detalle con componentes de `21st`.
-- **Fase 2 (Backend y Geo-Queries):** Conectar MongoDB, crear endpoints `POST /api/reportes` y `GET /api/reportes/cercanos` usando `$nearSphere`, formularios de pérdida/avistamiento (slider de radio) y subida de imágenes a Cloudinary con compresión en el cliente.
+- **Fase 2 (Backend y Geo-Queries) — ✅ hecha:** MongoDB (`2dsphere`), `POST /api/reportes` y `GET /api/reportes/cercanos` (`$nearSphere`, solo `ACTIVO` y de los últimos 60 días por filtro, sin TTL), subida a Cloudinary con compresión en el cliente, y flujo de publicación: pin central fijo + "Mi ubicación" (GPS), slider de radio con círculo en vivo (PERDIDO) y formulario en Drawer. WhatsApp obligatorio en PERDIDO, opcional en AVISTADO.
 - **Fase 3 (Motor de IA Vectorial):** Extraer embeddings CLIP con `@huggingface/transformers` al subir una foto y configurar `$vectorSearch` en MongoDB para detectar coincidencias en el radio cercano.
-- **Fase 4 (Autenticación y "Mis Reportes"):** Firebase Auth (Google) solo al publicar, validación del token en el backend, pestaña "Mis Reportes" para marcar "¡Encontrada!" y aviso en pantalla de coincidencias de la IA.
+- **Fase 4 (Autenticación y "Mis Reportes"):** Firebase Auth (Google) solo al publicar, validación del token en el backend, pestaña "Mis Reportes" para marcar "¡Encontrada!", aviso en pantalla de coincidencias de la IA y **chat interno vecino ↔ dueño** para avistamientos sin teléfono (propuesta: Firestore, gratis y en tiempo real).
 - **Fase 5 (PWA y Despliegue):** Manifest + service worker (`vite-plugin-pwa`), caché de teselas y de la app para señal inestable, notificaciones, y despliegue gratuito (frontend en Vercel/Netlify/Cloudflare Pages, backend en un host con RAM suficiente para el modelo CLIP).
 
 ## 11. Comandos
 - `npm run install:all` — instala raíz, backend y frontend.
 - `npm run dev` — levanta API (http://localhost:4000/api) y web (http://localhost:5173) juntas.
-- `npm test` — tests del backend (`node --test`).
+- `npm test` — tests del backend (`node --test` + supertest + mongodb-memory-server; Cloudinary falso).
+- `npm --prefix backend run db:indices` — verifica el índice `2dsphere` y que `$nearSphere` lo use.
+- `npm --prefix backend run db:seed` — carga los 3 reportes de prueba (sube sus fotos a Cloudinary).
 - `npm run build` — build de producción del frontend.

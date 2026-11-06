@@ -49,6 +49,17 @@ export function assertLatLng([lat, lng]: LatLng): void {
   }
 }
 
+/** Distancia en metros entre dos puntos Leaflet (fórmula de haversine). */
+export function distanciaMetros([lat1, lng1]: LatLng, [lat2, lng2]: LatLng): number {
+  const R = 6_371_008.8
+  const rad = Math.PI / 180
+  const dLat = (lat2 - lat1) * rad
+  const dLng = (lng2 - lng1) * rad
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
 /**
  * Chile continental está aprox. entre lat -17 y -56, lng -66 y -76.
  * Si un punto cae fuera, lo más probable es que las coordenadas estén invertidas.

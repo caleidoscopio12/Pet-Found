@@ -21,6 +21,11 @@ export function formatoRadio(metros: number): string {
   return `${km.toLocaleString('es-CL', { maximumFractionDigits: 1 })} km`
 }
 
+/** Minúsculas y sin tildes, para buscar "Michí" escribiendo "michi". */
+export function normalizar(texto: string): string {
+  return texto.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
+}
+
 /** Link directo a WhatsApp con mensaje prellenado. "+56911111111" → wa.me/56911111111 */
 export function linkWhatsApp(numero: string, mensaje: string): string {
   return `https://wa.me/${numero.replace(/\D/g, '')}?text=${encodeURIComponent(mensaje)}`

@@ -1,4 +1,4 @@
-import { Clock, Gift, MapPin, MessageCircle } from 'lucide-react'
+import { Clock, Gift, MapPin, MessageCircle, MessageCircleOff } from 'lucide-react'
 import { formatoCLP, formatoRadio, haceCuanto, linkWhatsApp } from '@/lib/formato'
 import { cn } from '@/lib/utils'
 import type { Reporte } from '@/types/reporte'
@@ -55,7 +55,9 @@ export function TarjetaMascota({ reporte }: { reporte: Reporte }) {
         </p>
       </header>
 
-      <p className="text-base leading-relaxed text-slate-900">{reporte.descripcion}</p>
+      {reporte.descripcion && (
+        <p className="text-base leading-relaxed text-slate-900">{reporte.descripcion}</p>
+      )}
 
       {reporte.recompensa > 0 && (
         <p className="flex items-center gap-2 rounded-xl bg-amber-100 px-4 py-3 text-base font-bold text-amber-950 ring-1 ring-amber-300">
@@ -64,15 +66,22 @@ export function TarjetaMascota({ reporte }: { reporte: Reporte }) {
         </p>
       )}
 
-      <a
-        href={linkWhatsApp(reporte.contacto_whatsapp, mensaje)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-[#1f9e4f] text-lg font-bold text-white shadow-lg active:scale-[0.98]"
-      >
-        <MessageCircle className="size-6" aria-hidden />
-        Escribir por WhatsApp
-      </a>
+      {reporte.contacto_whatsapp ? (
+        <a
+          href={linkWhatsApp(reporte.contacto_whatsapp, mensaje)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-[#1f9e4f] text-lg font-bold text-white shadow-lg active:scale-[0.98]"
+        >
+          <MessageCircle className="size-6" aria-hidden />
+          Escribir por WhatsApp
+        </a>
+      ) : (
+        <p className="flex items-start gap-3 rounded-2xl bg-slate-100 px-4 py-3 text-[15px] leading-snug text-slate-800">
+          <MessageCircleOff className="mt-0.5 size-5 shrink-0 text-slate-600" aria-hidden />
+          Este vecino no dejó teléfono. Pronto podrás escribirle por chat desde la app.
+        </p>
+      )}
     </article>
   )
 }

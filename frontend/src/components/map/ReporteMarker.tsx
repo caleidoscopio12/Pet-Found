@@ -1,19 +1,12 @@
 import { Circle, Marker } from 'react-leaflet'
 import { toLeaflet } from '@/lib/geo'
 import type { Reporte } from '@/types/reporte'
-import { iconoAvistado, iconoPerdido } from './markerIcons'
-
-const estiloRadio = {
-  color: '#dc2626', // red-600
-  weight: 2,
-  dashArray: '6 6',
-  fillColor: '#ef4444', // red-500
-  fillOpacity: 0.12,
-}
+import { ESTILO_RADIO, iconoAvistado, iconoPerdido } from './markerIcons'
 
 interface Props {
   reporte: Reporte
-  onSelect: (reporte: Reporte) => void
+  /** Sin onSelect el pin no responde al toque (modo elegir ubicación). */
+  onSelect?: (reporte: Reporte) => void
 }
 
 export function ReporteMarker({ reporte, onSelect }: Props) {
@@ -28,7 +21,7 @@ export function ReporteMarker({ reporte, onSelect }: Props) {
         <Circle
           center={centro}
           radius={reporte.radio_metros}
-          pathOptions={estiloRadio}
+          pathOptions={onSelect ? ESTILO_RADIO : { ...ESTILO_RADIO, opacity: 0.35, fillOpacity: 0.05 }}
           interactive={false}
         />
       )}
@@ -36,7 +29,9 @@ export function ReporteMarker({ reporte, onSelect }: Props) {
         position={centro}
         icon={esPerdido ? iconoPerdido : iconoAvistado}
         title={reporte.nombre_mascota ?? 'Mascota avistada'}
-        eventHandlers={{ click: () => onSelect(reporte) }}
+        opacity={onSelect ? 1 : 0.45}
+        interactive={Boolean(onSelect)}
+        eventHandlers={onSelect ? { click: () => onSelect(reporte) } : {}}
       />
     </>
   )

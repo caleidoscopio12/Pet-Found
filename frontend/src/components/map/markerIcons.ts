@@ -10,6 +10,17 @@ import L from 'leaflet'
 
 const TAMANO = 44 // área táctil cómoda para el pulgar
 
+/** Estilo del círculo de radio de búsqueda (reportes y vista previa al publicar). */
+export const ESTILO_RADIO = {
+  color: '#dc2626', // red-600
+  weight: 2,
+  dashArray: '6 6',
+  fillColor: '#ef4444', // red-500
+  fillOpacity: 0.12,
+}
+
+export const ESTILO_RADIO_PREVIEW = { ...ESTILO_RADIO, weight: 3, fillOpacity: 0.18 }
+
 export const iconoPerdido = L.divIcon({
   className: '',
   iconSize: [TAMANO, TAMANO],

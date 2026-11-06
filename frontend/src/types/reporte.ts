@@ -10,13 +10,13 @@ export interface Reporte {
   tipo: TipoReporte
   especie: Especie
   estado: EstadoReporte
-  /** Opcional en avistamientos. */
+  /** Obligatorio en PERDIDO, opcional en avistamientos. */
   nombre_mascota?: string
   /** Máx. 300 caracteres. */
-  descripcion: string
+  descripcion?: string
   recompensa: number
-  /** Formato +569XXXXXXXX */
-  contacto_whatsapp: string
+  /** Formato +569XXXXXXXX. Obligatorio en PERDIDO, opcional en AVISTADO. */
+  contacto_whatsapp?: string
   foto_url: string
   /** ¡Siempre [longitud, latitud]! */
   ubicacion: GeoPoint

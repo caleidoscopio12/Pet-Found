@@ -244,6 +244,8 @@ export interface DrawerContentProps {
   description?: React.ReactNode;
   /** Título solo para lectores de pantalla cuando no se usa `title` visible. */
   srTitle?: string;
+  /** Elemento que recibe el foco al abrir (evita abrir el teclado móvil en un input). */
+  initialFocus?: React.ComponentPropsWithoutRef<typeof BaseDrawer.Popup>["initialFocus"];
   container?: React.ComponentPropsWithoutRef<
     typeof BaseDrawer.Portal
   >["container"];
@@ -257,6 +259,7 @@ export function DrawerContent({
   title,
   description,
   srTitle,
+  initialFocus,
   container,
   showHandle = true,
   showClose = true,
@@ -272,6 +275,7 @@ export function DrawerContent({
       <BaseDrawer.Backdrop className={backdropClass} />
       <BaseDrawer.Viewport className="fixed inset-0 z-[var(--primitive-z-overlay,100)] outline-none">
         <BaseDrawer.Popup data-wensity-primitive=""
+          initialFocus={initialFocus}
           className={cn(
             sideLayout[side],
             elevatedSurfaceClass,
