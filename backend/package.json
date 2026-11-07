@@ -11,11 +11,17 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test",
+    "test": "node --test \"test/**/*.test.js\" \"src/**/*.test.js\"",
+    "test:modelo": "node --test \"test-modelo/**/*.test.js\"",
     "db:seed": "node scripts/seed.js",
-    "db:indices": "node scripts/verificar-indices.js"
+    "db:indices": "node scripts/verificar-indices.js",
+    "db:indice-vectorial": "node scripts/indice-vectorial.js",
+    "db:embeddings": "node scripts/embeddings.js",
+    "db:similares": "node scripts/similares.js",
+    "db:calibrar": "node scripts/calibrar.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.2",
     "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",

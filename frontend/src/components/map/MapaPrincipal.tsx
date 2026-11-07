@@ -1,15 +1,19 @@
 import L, { type TileErrorEvent } from 'leaflet'
 import { useEffect, useState } from 'react'
-import { Circle, MapContainer, TileLayer, useMap } from 'react-leaflet'
+import { AttributionControl, Circle, MapContainer, TileLayer, useMap } from 'react-leaflet'
 import type { AreaMapa } from '@/hooks/useReportesCercanos'
 import { CARTO_API_KEY, DEFAULT_CENTER } from '@/lib/config'
 import type { LatLng } from '@/lib/geo'
+import { FRACCION_FICHA_COMPACTA, MARGEN_SUPERIOR_PX } from '@/lib/layout'
 import type { Reporte } from '@/types/reporte'
 import { ESTILO_RADIO_PREVIEW } from './markerIcons'
 import { ReporteMarker } from './ReporteMarker'
 
-const OSM_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+/**
+ * Crédito mínimo que exigen las licencias de OSM (ODbL) y CARTO: no se puede quitar,
+ * pero sí acortar. "© OpenStreetMap" con enlace a /copyright es la forma corta aceptada por OSM.
+ */
+const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 
 /**
  * CARTO Voyager: mejor contraste que el OSM estándar bajo el sol.
@@ -60,23 +64,45 @@ export interface EnfoqueMapa {
   /** Zoom mínimo al llegar (default 15). */
   zoom?: number
   /**
-   * true (default): deja el punto en el tercio superior porque abajo se abre un Drawer.
+   * true (default): encuadra en la mitad libre de arriba porque abajo abre la ficha compacta.
    * false: lo deja en el centro exacto (GPS / elegir ubicación).
    */
   desplazar?: boolean
+  /** Radio en metros (mascota perdida): el zoom se ajusta para que el círculo completo se vea. */
+  radio?: number
 }
 
 function VolarA({ enfoque }: { enfoque: EnfoqueMapa | null }) {
   const map = useMap()
   useEffect(() => {
     if (!enfoque) return
-    const zoom = Math.max(map.getZoom(), enfoque.zoom ?? 15)
-    let destino = L.latLng(enfoque.centro)
-    if (enfoque.desplazar !== false) {
-      const punto = map.project(destino, zoom).add([0, map.getSize().y * 0.22])
-      destino = map.unproject(punto, zoom)
+    const destino = L.latLng(enfoque.centro)
+
+    if (enfoque.desplazar === false) {
+      map.flyTo(destino, Math.max(map.getZoom(), enfoque.zoom ?? 15), { duration: 0.8 })
+      return
     }
-    map.flyTo(destino, zoom, { duration: 0.8 })
+
+    // Zona libre: entre la barra de filtros y el borde superior de la ficha compacta.
+    const alto = map.getSize().y
+    const libreArriba = MARGEN_SUPERIOR_PX
+    const libreAbajo = alto * FRACCION_FICHA_COMPACTA
+
+    if (enfoque.radio && enfoque.radio > 0) {
+      map.flyToBounds(destino.toBounds(enfoque.radio * 2), {
+        paddingTopLeft: [24, libreArriba + 12],
+        paddingBottomRight: [24, libreAbajo + 12],
+        maxZoom: 17,
+        duration: 0.8,
+      })
+      return
+    }
+
+    // Sin radio: dejar el pin al centro de la zona libre.
+    const zoom = Math.max(map.getZoom(), enfoque.zoom ?? 16)
+    const yObjetivo = (libreArriba + (alto - libreAbajo)) / 2
+    const punto = map.project(destino, zoom).add([0, alto / 2 - yObjetivo])
+    map.flyTo(map.unproject(punto, zoom), zoom, { duration: 0.8 })
   }, [enfoque, map])
   return null
 }
@@ -166,20 +192,35 @@ interface Props {
   enfoque?: EnfoqueMapa | null
   onArea: (area: AreaMapa) => void
   seleccion?: SeleccionMapa | null
+  /** Botón "Ver radios": muestra el círculo de todas las mascotas perdidas. */
+  radiosVisibles?: boolean
+  /** El reporte con la ficha abierta siempre muestra su radio. */
+  seleccionadoId?: string | null
 }
 
 /**
  * Mapa a pantalla completa. El contenedor padre (App) usa `isolate` para que
  * los paneles de Leaflet (z-index 400–1000) no tapen el FAB ni el Drawer.
  */
-export function MapaPrincipal({ reportes, onSelect, enfoque = null, onArea, seleccion = null }: Props) {
+export function MapaPrincipal({
+  reportes,
+  onSelect,
+  enfoque = null,
+  onArea,
+  seleccion = null,
+  radiosVisibles = false,
+  seleccionadoId = null,
+}: Props) {
   return (
     <MapContainer
       center={DEFAULT_CENTER}
       zoom={14}
       zoomControl={false}
+      attributionControl={false}
       className="h-full w-full"
     >
+      {/* Sin el prefijo "Leaflet" ni la bandera (opcionales); solo el crédito obligatorio. */}
+      <AttributionControl position="bottomright" prefix={false} />
       <TileLayer
         url={TILES.url}
         attribution={TILES.attribution}
@@ -188,7 +229,12 @@ export function MapaPrincipal({ reportes, onSelect, enfoque = null, onArea, sele
         eventHandlers={{ tileerror: reintentarTesela }}
       />
       {reportes.map((r) => (
-        <ReporteMarker key={r._id} reporte={r} onSelect={onSelect} />
+        <ReporteMarker
+          key={r._id}
+          reporte={r}
+          onSelect={onSelect}
+          mostrarRadio={radiosVisibles || r._id === seleccionadoId}
+        />
       ))}
       <VolarA enfoque={enfoque} />
       <CargadorArea onArea={onArea} />

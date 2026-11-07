@@ -7,9 +7,11 @@ interface Props {
   reporte: Reporte
   /** Sin onSelect el pin no responde al toque (modo elegir ubicación). */
   onSelect?: (reporte: Reporte) => void
+  /** El círculo de radio no se dibuja de partida, para no saturar el mapa. */
+  mostrarRadio?: boolean
 }
 
-export function ReporteMarker({ reporte, onSelect }: Props) {
+export function ReporteMarker({ reporte, onSelect, mostrarRadio = false }: Props) {
   // La API/Mongo entrega [lng, lat]; Leaflet necesita [lat, lng].
   const centro = toLeaflet(reporte.ubicacion.coordinates)
   const esPerdido = reporte.tipo === 'PERDIDO'
@@ -17,7 +19,7 @@ export function ReporteMarker({ reporte, onSelect }: Props) {
   return (
     <>
       {/* <Circle> usa METROS reales y escala con el zoom (a diferencia de CircleMarker). */}
-      {esPerdido && reporte.radio_metros > 0 && (
+      {mostrarRadio && esPerdido && reporte.radio_metros > 0 && (
         <Circle
           center={centro}
           radius={reporte.radio_metros}

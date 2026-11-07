@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Aviso } from '@/components/Aviso'
+import { CoincidenciaSheet, type DatosCoincidencias } from '@/components/coincidencias/CoincidenciaSheet'
 import { BotonLista } from '@/components/BotonLista'
+import { BotonRadios } from '@/components/BotonRadios'
 import { EstadoCarga } from '@/components/EstadoCarga'
 import { FabAcciones } from '@/components/FabAcciones'
 import { FiltrosReporte } from '@/components/FiltrosReporte'
@@ -13,7 +16,7 @@ import { DEFAULT_CENTER } from '@/lib/config'
 import { toLeaflet, type LatLng } from '@/lib/geo'
 import { pedirUbicacion } from '@/lib/geolocalizacion'
 import { RADIO_DEFAULT } from '@/lib/reglas'
-import type { FiltroReporte, Reporte, TipoReporte } from '@/types/reporte'
+import type { Coincidencia, FiltroReporte, Reporte, TipoReporte } from '@/types/reporte'
 
 /** Tiempo para que un panel termine de cerrarse antes de abrir otro. */
 const PAUSA_ENTRE_PANELES_MS = 280
@@ -24,9 +27,13 @@ interface Publicacion {
 }
 
 export default function App() {
-  const { reportes, estado, error, cargar, reintentar, agregar } = useReportesCercanos()
+  const { reportes, estado, error, cargar, reintentar, agregar, quitar } = useReportesCercanos()
 
   const [filtro, setFiltro] = useState<FiltroReporte>('TODOS')
+  const [radiosVisibles, setRadiosVisibles] = useState(false)
+  const [aviso, setAviso] = useState<string | null>(null)
+  const [coincidencias, setCoincidencias] = useState<DatosCoincidencias | null>(null)
+  const cerrarAviso = useCallback(() => setAviso(null), [])
   const [seleccionado, setSeleccionado] = useState<Reporte | null>(null)
   const [listaAbierta, setListaAbierta] = useState(false)
   const [enfoque, setEnfoque] = useState<EnfoqueMapa | null>(null)
@@ -61,9 +68,25 @@ export default function App() {
   const visibles = filtro === 'TODOS' ? reportes : reportes.filter((r) => r.tipo === filtro)
 
   /** Cerrar paneles → volar al pin → abrir su detalle. */
+  /** Encuadra el pin (y su radio si es PERDIDO) en la zona libre sobre la ficha compacta. */
+  function enfocar(reporte: Reporte) {
+    setEnfoque({
+      centro: toLeaflet(reporte.ubicacion.coordinates),
+      id: Date.now(),
+      radio: reporte.tipo === 'PERDIDO' ? reporte.radio_metros : undefined,
+    })
+  }
+
+  /** Al tocar un pin: abrir su ficha y encuadrarlo. */
+  function abrirDesdePin(reporte: Reporte) {
+    setSeleccionado(reporte)
+    enfocar(reporte)
+  }
+
+  /** Desde la lista o tras publicar: cerrar paneles → encuadrar → abrir su ficha. */
   function mostrarReporte(reporte: Reporte) {
     if (filtro !== 'TODOS' && filtro !== reporte.tipo) setFiltro('TODOS') // que el pin se vea
-    setEnfoque({ centro: toLeaflet(reporte.ubicacion.coordinates), id: Date.now() })
+    enfocar(reporte)
     window.clearTimeout(temporizador.current)
     temporizador.current = window.setTimeout(() => setSeleccionado(reporte), PAUSA_ENTRE_PANELES_MS)
   }
@@ -112,9 +135,27 @@ export default function App() {
     setPublicando(null)
   }
 
-  function alPublicar(reporte: Reporte) {
+  function alBorrar(reporte: Reporte) {
+    setSeleccionado(null)
+    quitar(reporte._id)
+    setAviso('Publicación borrada')
+  }
+
+  function alPublicar(reporte: Reporte, encontradas: Coincidencia[]) {
     agregar(reporte)
     setPublicando(null)
+    if (encontradas.length > 0) {
+      // ¡Posible coincidencia! Primero la alerta; el mapa ya queda en tu publicación.
+      for (const c of encontradas) agregar(c.reporte)
+      enfocar(reporte)
+      setCoincidencias({ propio: reporte, lista: encontradas })
+      return
+    }
+    mostrarReporte(reporte)
+  }
+
+  function verCoincidenciaEnMapa(reporte: Reporte) {
+    setCoincidencias(null)
     mostrarReporte(reporte)
   }
 
@@ -138,10 +179,12 @@ export default function App() {
       <div className="absolute inset-0 z-0">
         <MapaPrincipal
           reportes={visibles}
-          onSelect={publicando ? undefined : setSeleccionado}
+          onSelect={publicando ? undefined : abrirDesdePin}
           enfoque={enfoque}
           onArea={cargar}
           seleccion={seleccion}
+          radiosVisibles={radiosVisibles}
+          seleccionadoId={seleccionado?._id}
         />
       </div>
 
@@ -154,6 +197,9 @@ export default function App() {
             avistados={conteo.AVISTADO}
             onClick={() => setListaAbierta(true)}
           />
+          {conteo.PERDIDO > 0 && (
+            <BotonRadios activo={radiosVisibles} onToggle={() => setRadiosVisibles((v) => !v)} />
+          )}
           <FabAcciones onAccion={iniciarPublicacion} />
         </>
       )}
@@ -179,7 +225,13 @@ export default function App() {
         onClose={() => setListaAbierta(false)}
         onElegir={elegirDesdeLista}
       />
-      <ReporteDetalleSheet reporte={seleccionado} onClose={() => setSeleccionado(null)} />
+      <ReporteDetalleSheet reporte={seleccionado} onClose={() => setSeleccionado(null)} onBorrado={alBorrar} />
+      <CoincidenciaSheet
+        datos={coincidencias}
+        onCerrar={() => setCoincidencias(null)}
+        onVerEnMapa={verCoincidenciaEnMapa}
+      />
+      <Aviso mensaje={aviso} onCerrar={cerrarAviso} />
       {sesion.id > 0 && (
         <FormularioReporteSheet
           key={sesion.id}

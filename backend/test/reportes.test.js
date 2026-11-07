@@ -4,6 +4,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server'
 import mongoose from 'mongoose'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
+import { LlaveBorrado } from '../src/models/LlaveBorrado.js'
 import { Reporte } from '../src/models/Reporte.js'
 import { hace60Dias } from '../src/routes/reportes.js'
 
@@ -32,6 +33,7 @@ before(async () => {
   mongod = await MongoMemoryServer.create()
   await mongoose.connect(mongod.getUri(), { autoIndex: false })
   await Reporte.createIndexes()
+  await LlaveBorrado.createIndexes()
   app = createApp({ ...fotosFalsas, limitePublicaciones: 1000 })
 })
 
@@ -42,6 +44,7 @@ after(async () => {
 
 beforeEach(async () => {
   await Reporte.deleteMany({})
+  await LlaveBorrado.deleteMany({})
   subidas.length = 0
   borradas.length = 0
 })
@@ -250,6 +253,68 @@ describe('GET /api/reportes/cercanos', () => {
   test('maxKm fuera de rango → 400', async () => {
     const res = await request(app).get('/api/reportes/cercanos').query({ ...CENTRO, maxKm: 500 })
     assert.equal(res.status, 400)
+  })
+})
+
+describe('DELETE /api/reportes/:id (llave de borrado)', () => {
+  const borrar = (id, llave) => {
+    const req = request(app).delete(`/api/reportes/${id}`)
+    return llave === undefined ? req : req.set('X-Llave-Borrado', llave)
+  }
+
+  test('POST entrega una llave de 43 caracteres y solo se guarda su huella', async () => {
+    const res = await publicar(perdidoValido)
+    assert.equal(res.status, 201)
+    assert.match(res.body.llaveBorrado, /^[A-Za-z0-9_-]{43}$/)
+    const llave = await LlaveBorrado.findOne({ reporte: res.body.reporte._id }).lean()
+    assert.ok(llave)
+    assert.notEqual(llave.hash, res.body.llaveBorrado, 'nunca se guarda la llave en claro')
+    assert.match(llave.hash, /^[a-f0-9]{64}$/)
+  })
+
+  test('con la llave correcta borra reporte, llave y foto', async () => {
+    const { body } = await publicar(perdidoValido)
+    const res = await borrar(body.reporte._id, body.llaveBorrado)
+    assert.equal(res.status, 200)
+    assert.equal(await Reporte.countDocuments(), 0)
+    assert.equal(await LlaveBorrado.countDocuments(), 0)
+    assert.deepEqual(borradas, ['pet-found/reportes/f1'])
+
+    const cercanos = await request(app).get('/api/reportes/cercanos').query(CENTRO)
+    assert.equal(cercanos.body.reportes.length, 0)
+  })
+
+  test('llave incorrecta o ausente → 403 y no borra nada', async () => {
+    const { body } = await publicar(perdidoValido)
+    assert.equal((await borrar(body.reporte._id, 'llave-falsa')).status, 403)
+    const sinLlave = await borrar(body.reporte._id)
+    assert.equal(sinLlave.status, 403)
+    assert.match(sinLlave.body.error, /Solo quien publicó/)
+    assert.equal(await Reporte.countDocuments(), 1)
+    assert.equal(borradas.length, 0)
+  })
+
+  test('la llave de un reporte no sirve para borrar otro', async () => {
+    const a = (await publicar(perdidoValido)).body
+    const b = (await publicar({ ...perdidoValido, nombre_mascota: 'Otro' })).body
+    assert.equal((await borrar(b.reporte._id, a.llaveBorrado)).status, 403)
+    assert.equal(await Reporte.countDocuments(), 2)
+  })
+
+  test('reporte sin llave (ej. del seed) no se puede borrar por la API', async () => {
+    const r = await insertar({ ...CENTRO, descripcion: 'seed' })
+    assert.equal((await borrar(r._id, 'cualquier-cosa')).status, 403)
+  })
+
+  test('id inválido o inexistente → 404', async () => {
+    assert.equal((await borrar('no-es-un-id', 'x')).status, 404)
+    assert.equal((await borrar(new mongoose.Types.ObjectId().toString(), 'x')).status, 404)
+  })
+
+  test('borrar dos veces → la segunda da 404', async () => {
+    const { body } = await publicar(perdidoValido)
+    assert.equal((await borrar(body.reporte._id, body.llaveBorrado)).status, 200)
+    assert.equal((await borrar(body.reporte._id, body.llaveBorrado)).status, 404)
   })
 })
 

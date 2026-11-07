@@ -147,6 +147,15 @@ body {
   background: #e2e8f0; /* slate-200 mientras cargan las teselas */
 }
 
-.leaflet-control-attribution {
-  font-size: 10px;
+/* Crédito del mapa: obligatorio por licencia, pero discreto. */
+.leaflet-container .leaflet-control-attribution {
+  font-size: 9px;
+  line-height: 1.4;
+  padding: 0 4px;
+  border-top-left-radius: 6px;
+  background: rgb(255 255 255 / 0.55);
+  color: rgb(71 85 105 / 0.8);
+}
+.leaflet-container .leaflet-control-attribution a {
+  color: inherit;
 }

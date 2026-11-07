@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Camera, CircleCheck, ImagePlus, LoaderCircle, RefreshCw } from 'lucide-react'
+import { FotoMascota } from '@/components/foto/FotoMascota'
 import { comprimirFoto, formatoPeso } from '@/lib/comprimirFoto'
 import { cn } from '@/lib/utils'
 
@@ -60,8 +61,9 @@ export function CampoFoto({ foto, onFoto, onComprimiendo, error }: Props) {
       <input ref={galeriaRef} type="file" accept="image/*" hidden onChange={elegir} />
 
       {foto || comprimiendo ? (
-        <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-200">
-          {vistaPrevia && <img src={vistaPrevia} alt="Foto elegida" className="size-full object-cover" />}
+        <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-slate-200">
+          {/* Completa, sin recortar: así ves exactamente lo que verán los vecinos. */}
+          {vistaPrevia && <FotoMascota url={vistaPrevia} alt="Foto elegida" className="size-full" />}
           {comprimiendo ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-900/55 text-white">
               <LoaderCircle className="size-8 animate-spin" aria-hidden />

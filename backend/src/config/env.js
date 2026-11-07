@@ -13,6 +13,12 @@ const esquemaEnv = z.object({
   CLOUDINARY_API_KEY: requerida('CLOUDINARY_API_KEY'),
   CLOUDINARY_API_SECRET: requerida('CLOUDINARY_API_SECRET'),
   CORS_ORIGIN: z.string().trim().default('http://localhost:5173'),
+  // Similitud coseno mínima (0 a 1) para avisar "posible coincidencia". Se calibra con db:calibrar.
+  UMBRAL_COINCIDENCIA: z.coerce
+    .number({ message: 'UMBRAL_COINCIDENCIA debe ser un número entre 0 y 1' })
+    .min(0.5, 'UMBRAL_COINCIDENCIA muy bajo (mínimo 0.5)')
+    .max(0.99, 'UMBRAL_COINCIDENCIA muy alto (máximo 0.99)')
+    .default(0.85),
 })
 
 /**

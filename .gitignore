@@ -8,6 +8,13 @@ dist/
 .env.*
 !.env.example
 
+# Modelos de IA descargados (CLIP, ~90 MB)
+.cache/
+
+# Fotos de calibración (pueden ser personales): solo se versiona el LEEME
+backend/calibracion/*
+!backend/calibracion/LEEME.md
+
 # Logs y sistema
 *.log
 npm-debug.log*

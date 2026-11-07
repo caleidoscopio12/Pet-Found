@@ -1,5 +1,6 @@
 import dns from 'node:dns'
 import mongoose from 'mongoose'
+import { LlaveBorrado } from '../models/LlaveBorrado.js'
 import { Reporte } from '../models/Reporte.js'
 
 /**
@@ -54,6 +55,7 @@ export async function conectarBD(uri) {
     await mongoose.connect(uri, opciones)
   }
   await Reporte.createIndexes()
+  await LlaveBorrado.createIndexes()
   return mongoose.connection
 }
 

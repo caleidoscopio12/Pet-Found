@@ -4,9 +4,10 @@ import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { crearReporte, ErrorApi } from '@/lib/api'
 import { formatoRadio } from '@/lib/formato'
 import type { LatLng } from '@/lib/geo'
+import { guardarLlave } from '@/lib/misReportes'
 import { DIGITOS_WHATSAPP, MAX_DESCRIPCION, MAX_NOMBRE, PREFIJO_WHATSAPP } from '@/lib/reglas'
 import { cn } from '@/lib/utils'
-import type { Especie, Reporte, TipoReporte } from '@/types/reporte'
+import type { Coincidencia, Especie, Reporte, TipoReporte } from '@/types/reporte'
 import { CampoFoto, type FotoLista } from './CampoFoto'
 
 type Campo = 'foto' | 'especie' | 'nombre_mascota' | 'descripcion' | 'contacto_whatsapp' | 'recompensa'
@@ -34,7 +35,7 @@ interface Props {
   radio: number
   /** Volver al paso 1 (sin perder lo escrito). */
   onCambiarUbicacion: () => void
-  onPublicado: (reporte: Reporte) => void
+  onPublicado: (reporte: Reporte, coincidencias: Coincidencia[]) => void
 }
 
 /** Paso 2 de publicar: foto + datos. Mismas reglas que valida el backend. */
@@ -99,9 +100,10 @@ export function FormularioReporteSheet({ abierto, tipo, ubicacion, radio, onCamb
 
     setEnvio('enviando')
     try {
-      const reporte = await crearReporte(datos)
+      const { reporte, llaveBorrado, coincidencias } = await crearReporte(datos)
+      guardarLlave(reporte._id, llaveBorrado) // para poder borrarlo luego desde este teléfono
       setEnvio('listo')
-      window.setTimeout(() => onPublicado(reporte), 700)
+      window.setTimeout(() => onPublicado(reporte, coincidencias ?? []), 700)
     } catch (err) {
       setEnvio('editando')
       if (err instanceof ErrorApi) {
@@ -120,7 +122,7 @@ export function FormularioReporteSheet({ abierto, tipo, ubicacion, radio, onCamb
     envio === 'listo'
       ? '¡Publicado!'
       : envio === 'enviando'
-        ? 'Publicando…'
+        ? 'Publicando y buscando coincidencias…'
         : comprimiendo
           ? 'Optimizando foto…'
           : 'Publicar'

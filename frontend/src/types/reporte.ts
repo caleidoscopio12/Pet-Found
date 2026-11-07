@@ -29,3 +29,12 @@ export interface Reporte {
 }
 
 export type FiltroReporte = 'TODOS' | TipoReporte
+
+/** Posible coincidencia que devuelve POST /api/reportes (Fase 3). */
+export interface Coincidencia {
+  reporte: Reporte
+  /** Similitud coseno de las fotos (0 a 1). */
+  similitud: number
+  /** Distancia entre ambos reportes, en metros. */
+  distanciaMetros: number
+}

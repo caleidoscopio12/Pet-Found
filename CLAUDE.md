@@ -14,7 +14,8 @@ Al entrar, la pantalla principal es directamente el mapa interactivo en tiempo r
 * **Tono de voz:** Empático, solidario, directo y claro (Español de Chile cercano). Cero tecnicismos.
 * **Interfaz (UI):** 100% Mobile-First. El mapa ocupa toda la pantalla (`100dvh`, no `100vh`, para que la barra del navegador móvil no lo corte) con botones flotantes grandes (FAB) en la parte inferior para ser operados con el pulgar bajo la luz del sol.
 * **Código de colores en el mapa:**
-  * **Rojo:** Mascota perdida (marcador central pulsante + círculo de radio de búsqueda).
+  * **Rojo:** Mascota perdida (marcador central pulsante). Su círculo de radio de búsqueda **no se muestra de partida** (no saturar el mapa): aparece al abrir su ficha o con el botón "Ver radios".
+  * **Ficha de detalle tipo "peek"** (`ReporteDetalleSheet.tsx`): abre a media pantalla (`FRACCION_FICHA_COMPACTA` en `frontend/src/lib/layout.ts`), no es modal ni oscurece el mapa, y se arrastra hacia arriba para ver todo. Al abrirla, el mapa encuadra el pin y el círculo COMPLETO en la mitad libre de arriba (`VolarA` en `MapaPrincipal.tsx`).
   * **Verde:** Mascota avistada en la calle (marcador puntual).
 
 ## 4. Funciones Principales (Core App)
@@ -51,7 +52,15 @@ Todo el stack es gratuito o tiene un plan gratis suficiente para un proyecto sin
   * La foto se sube **a través del backend** (`multer` en memoria, máx 5 MB, se revisan los primeros bytes para confirmar que es imagen) → `cloudinary.uploader.upload_stream` a la carpeta `pet-found/reportes`. Así el backend tiene los bytes para el embedding de la Fase 3.
   * Cliente: `browser-image-compression` (800 px, calidad 0.8, WebP o JPEG si el navegador no codifica WebP) en `frontend/src/lib/comprimirFoto.ts`.
 * **Validación backend:** `zod` para la entrada HTTP (`backend/src/validation/reporte.js`) + Mongoose `strict: 'throw'`. Errores `{ ok:false, error, campos }` en español. `helmet`, CORS por `CORS_ORIGIN` y `express-rate-limit` (10 publicaciones/15 min por IP mientras no haya login).
-* **IA de Reconocimiento:** **`@huggingface/transformers` v3** (sucesor oficial de `@xenova/transformers`) con un modelo **CLIP** (ej. `Xenova/clip-vit-base-patch32`), ejecutándose en el backend para generar los vectores gratis sin pagar APIs externas. CLIP está hecho para comparar imágenes por similitud, por eso se prefiere sobre MobileNet.
+* **IA de Reconocimiento:** `@huggingface/transformers` (**v4.3**, misma API que v3) con **`Xenova/clip-vit-base-patch32`** (torre de visión, `q8`, 512 dims), en el backend y gratis. `backend/src/services/embeddings.js`:
+  * Se **precarga al arrancar** (`server.js`, con inferencia de calentamiento) antes de abrir el puerto; el modelo queda en `backend/.cache/modelos` (ignorado por git). Si no carga, la API funciona sin IA (`/api/health` → `ia: "desactivada"`).
+  * Convierte siempre a RGB (`.rgb()`): PNG/WebP con transparencia o en grises fallaban sin eso.
+  * Embedding normalizado L2 (coseno = producto punto), ~80 ms por foto de celular.
+* **Motor de coincidencias** (`backend/src/services/coincidencias.js`), en `POST /api/reportes`: embedding ANTES de subir a Cloudinary → guardar → `$geoNear` (2dsphere) + coseno exacto en Node → `coincidencias` (máx. 3, misma especie, ≥ `UMBRAL_COINCIDENCIA`).
+  * AVISTADO → PERDIDOS cuyo **propio radio** cubre el punto. PERDIDO → AVISTADOS dentro de su radio.
+  * No se usa `$vectorSearch` en el POST: debe ser la 1.ª etapa y no admite filtro geoespacial. El índice `embedding_vector` (Atlas Vector Search, 512, coseno, filtros tipo/especie/estado/createdAt) existe y lo usa `db:similares` (búsqueda amplia). Ojo: su `score` es `(1+coseno)/2`.
+  * Si la IA falla, el reporte se publica igual (sin embedding ni coincidencias).
+  * Frontend: `CoincidenciaSheet.tsx` (alerta modal "¡Posible coincidencia!" tras publicar, fotos lado a lado, WhatsApp al dueño o al vecino).
 * **Autenticación:** **Firebase Auth** (Google Sign-In, plan Spark gratis y sin pausas por inactividad). El backend valida el ID token con `firebase-admin`.
 
 ## 6. Reglas de Ejecución para Claude Code
@@ -84,6 +93,8 @@ No inventes campos nuevos sin consultar. Usa estrictamente esta estructura para 
 
 El tipo TypeScript espejo vive en `frontend/src/types/reporte.ts`.
 
+**Colección auxiliar `llaves_borrado`** (aprobada por el usuario, NO es parte de `Reportes`): `{ reporte: ObjectId (único), hash: sha256 hex, createdAt }`. Al publicar, `POST /api/reportes` devuelve `llaveBorrado` UNA sola vez; el teléfono la guarda en `localStorage` (`frontend/src/lib/misReportes.ts`) y `DELETE /api/reportes/:id` exige el header `X-Llave-Borrado`. Borra reporte, llave y foto de Cloudinary. Solo funciona desde el mismo navegador que publicó; los reportes sin llave (seed o publicados antes de este cambio) no se pueden borrar por la API. En la Fase 4 se reemplaza por el dueño autenticado.
+
 ## 8. Prevención de Errores Comunes (Guardrails Técnicos)
 1. **Trampa de Coordenadas (Leaflet vs MongoDB):** Leaflet usa `[latitud, longitud]` en el frontend, pero MongoDB GeoJSON exige estrictamente `[longitud, latitud]`. Usa SIEMPRE las utilidades `toLeaflet` / `toGeoJSON` / `toGeoPoint` de `frontend/src/lib/geo.ts` y `backend/src/utils/geo.js` (con tests en `backend/src/utils/geo.test.js`).
 2. **Bug de Iconos en React-Leaflet:** Al empaquetar con Vite, los iconos por defecto de Leaflet se rompen. Usar solo los `L.divIcon` con clases de Tailwind de `frontend/src/components/map/markerIcons.ts` (pin rojo pulsante para perdidos y verde para avistados). Nunca `L.Icon.Default`.
@@ -94,7 +105,7 @@ El tipo TypeScript espejo vive en `frontend/src/types/reporte.ts`.
 7. **Fricción Cero en Autenticación:** No obligues a crear cuenta con contraseña para mirar el mapa. Usa Firebase Auth (Google Sign-In) solo en el momento en que el usuario intenta publicar un reporte.
 
 ## 9. Variables de Entorno (.env.example)
-- Backend (`backend/.env.example`): `PORT`, `CORS_ORIGIN`, `MONGODB_URI`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`. `backend/src/config/env.js` las valida al arrancar.
+- Backend (`backend/.env.example`): `PORT`, `CORS_ORIGIN`, `UMBRAL_COINCIDENCIA` (default 0.85, calibrar con `db:calibrar`), `MONGODB_URI`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`. `backend/src/config/env.js` las valida al arrancar.
 - Frontend (`frontend/.env.example`): `VITE_API_URL`, `VITE_DEFAULT_LAT`, `VITE_DEFAULT_LNG` (centrar mapa por defecto en `[-35.333, -72.416]`), `VITE_CARTO_API_KEY`.
 - Fase 4 agregará las llaves públicas de Firebase (`VITE_FIREBASE_*`) y la cuenta de servicio en el backend.
 
@@ -103,14 +114,20 @@ Avanza estrictamente en este orden y espera confirmación entre cada fase:
 
 - **Fase 1 (Esqueleto y Mapa Mock) — ✅ hecha:** Monorepo (`/frontend` y `/backend`), mapa a pantalla completa con `react-leaflet` + CARTO Voyager, 3 mascotas de prueba (hardcoded, en formato GeoJSON) con círculos de radio, filtros, FAB expandible y bottom sheet de detalle con componentes de `21st`.
 - **Fase 2 (Backend y Geo-Queries) — ✅ hecha:** MongoDB (`2dsphere`), `POST /api/reportes` y `GET /api/reportes/cercanos` (`$nearSphere`, solo `ACTIVO` y de los últimos 60 días por filtro, sin TTL), subida a Cloudinary con compresión en el cliente, y flujo de publicación: pin central fijo + "Mi ubicación" (GPS), slider de radio con círculo en vivo (PERDIDO) y formulario en Drawer. WhatsApp obligatorio en PERDIDO, opcional en AVISTADO.
-- **Fase 3 (Motor de IA Vectorial):** Extraer embeddings CLIP con `@huggingface/transformers` al subir una foto y configurar `$vectorSearch` en MongoDB para detectar coincidencias en el radio cercano.
+- **Fase 3 (Motor de IA Vectorial) — ✅ implementada, falta fijar el umbral:** embeddings CLIP al publicar, coincidencias geo + coseno en ambas direcciones, índice `$vectorSearch` en Atlas y alerta en el frontend. Pendiente: correr `db:calibrar` con fotos reales (incluidas mascotas negras) y fijar `UMBRAL_COINCIDENCIA`.
 - **Fase 4 (Autenticación y "Mis Reportes"):** Firebase Auth (Google) solo al publicar, validación del token en el backend, pestaña "Mis Reportes" para marcar "¡Encontrada!", aviso en pantalla de coincidencias de la IA y **chat interno vecino ↔ dueño** para avistamientos sin teléfono (propuesta: Firestore, gratis y en tiempo real).
 - **Fase 5 (PWA y Despliegue):** Manifest + service worker (`vite-plugin-pwa`), caché de teselas y de la app para señal inestable, notificaciones, y despliegue gratuito (frontend en Vercel/Netlify/Cloudflare Pages, backend en un host con RAM suficiente para el modelo CLIP).
 
 ## 11. Comandos
 - `npm run install:all` — instala raíz, backend y frontend.
 - `npm run dev` — levanta API (http://localhost:4000/api) y web (http://localhost:5173) juntas.
+- `npm run dev:movil` — igual, pero la web en **HTTPS** (certificado autofirmado de `@vitejs/plugin-basic-ssl`) y expuesta en la red local, para probar GPS y cámara desde el celular: `https://<IP-Wi-Fi-del-PC>:5173`. En ese modo el frontend llama a `/api` y Vite lo reenvía al backend (sin contenido mixto ni "localhost" del teléfono).
 - `npm test` — tests del backend (`node --test` + supertest + mongodb-memory-server; Cloudinary falso).
 - `npm --prefix backend run db:indices` — verifica el índice `2dsphere` y que `$nearSphere` lo use.
 - `npm --prefix backend run db:seed` — carga los 3 reportes de prueba (sube sus fotos a Cloudinary).
+- `npm --prefix backend run test:modelo` — tests con el modelo CLIP real (lento; no entra en `npm test`).
+- `npm --prefix backend run db:calibrar [-- <carpeta>]` — matriz de similitud y umbral sugerido con fotos reales (`backend/calibracion/LEEME.md`).
+- `npm --prefix backend run db:indice-vectorial` — crea/verifica el índice Atlas Vector Search `embedding_vector`.
+- `npm --prefix backend run db:embeddings [-- --todos]` — calcula embeddings faltantes (o todos).
+- `npm --prefix backend run db:similares -- <id> [--tipo=PERDIDO]` — búsqueda por parecido con `$vectorSearch`.
 - `npm run build` — build de producción del frontend.

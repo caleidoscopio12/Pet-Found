@@ -246,6 +246,11 @@ export interface DrawerContentProps {
   srTitle?: string;
   /** Elemento que recibe el foco al abrir (evita abrir el teclado móvil en un input). */
   initialFocus?: React.ComponentPropsWithoutRef<typeof BaseDrawer.Popup>["initialFocus"];
+  /**
+   * false: sin fondo oscuro y sin bloquear lo que hay detrás (usar con `modal={false}`
+   * en <Drawer>), para hojas tipo "peek" que dejan el mapa visible y usable.
+   */
+  fondo?: boolean;
   container?: React.ComponentPropsWithoutRef<
     typeof BaseDrawer.Portal
   >["container"];
@@ -260,6 +265,7 @@ export function DrawerContent({
   description,
   srTitle,
   initialFocus,
+  fondo = true,
   container,
   showHandle = true,
   showClose = true,
@@ -272,8 +278,13 @@ export function DrawerContent({
 
   return (
     <BaseDrawer.Portal container={container}>
-      <BaseDrawer.Backdrop className={backdropClass} />
-      <BaseDrawer.Viewport className="fixed inset-0 z-[var(--primitive-z-overlay,100)] outline-none">
+      {fondo && <BaseDrawer.Backdrop className={backdropClass} />}
+      <BaseDrawer.Viewport
+        className={cn(
+          "fixed inset-0 z-[var(--primitive-z-overlay,100)] outline-none",
+          !fondo && "pointer-events-none [&>*]:pointer-events-auto",
+        )}
+      >
         <BaseDrawer.Popup data-wensity-primitive=""
           initialFocus={initialFocus}
           className={cn(

@@ -11,7 +11,12 @@ export const DEFAULT_CENTER: LatLng = [
   num(import.meta.env.VITE_DEFAULT_LNG, -72.416),
 ]
 
-export const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'
+/**
+ * En modo "movil" (npm run dev:movil) se usa la ruta relativa /api: Vite la reenvía al
+ * backend, así el celular no llama a "localhost" ni a HTTP desde una página HTTPS.
+ */
+export const API_URL: string =
+  import.meta.env.MODE === 'movil' ? '/api' : (import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api')
 
 /** Key gratuita de CARTO Basemaps (https://carto.com/basemaps/apikey). Vacía → teselas OSM. */
 export const CARTO_API_KEY: string = import.meta.env.VITE_CARTO_API_KEY?.trim() ?? ''

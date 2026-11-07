@@ -4,14 +4,17 @@ import helmet from 'helmet'
 import mongoose from 'mongoose'
 import { manejarErrores } from './middleware/errores.js'
 import { rutasReportes } from './routes/reportes.js'
+import { UMBRAL_POR_DEFECTO } from './services/coincidencias.js'
 
 /**
  * Crea la app Express (separada de server.js para testearla sin levantar el puerto).
- * Las dependencias externas (Cloudinary) se inyectan para poder usar fakes en los tests.
+ * Las dependencias externas (Cloudinary, modelo CLIP) se inyectan para poder usar fakes en los tests.
  */
 export function createApp({
   subirFoto,
   borrarFoto,
+  calcularEmbedding = null,
+  umbralCoincidencia = UMBRAL_POR_DEFECTO,
   corsOrigin = 'http://localhost:5173',
   limitePublicaciones = 10,
 } = {}) {
@@ -26,12 +29,16 @@ export function createApp({
     res.json({
       ok: true,
       servicio: 'mascotas-api',
-      fase: 2,
+      fase: 3,
       db: mongoose.connection.readyState === 1 ? 'conectada' : 'desconectada',
+      ia: calcularEmbedding ? 'activa' : 'desactivada',
     })
   })
 
-  app.use('/api/reportes', rutasReportes({ subirFoto, borrarFoto, limitePublicaciones }))
+  app.use(
+    '/api/reportes',
+    rutasReportes({ subirFoto, borrarFoto, limitePublicaciones, calcularEmbedding, umbralCoincidencia }),
+  )
 
   app.use((_req, res) => {
     res.status(404).json({ ok: false, error: 'Ruta no encontrada' })

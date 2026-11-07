@@ -72,5 +72,10 @@ export function useReportesCercanos() {
     setReportes((prev) => [nuevo, ...prev.filter((r) => r._id !== nuevo._id)])
   }, [])
 
-  return { reportes, estado, error, cargar, reintentar, agregar }
+  /** Quita un reporte borrado sin esperar otra carga. */
+  const quitar = useCallback((id: string) => {
+    setReportes((prev) => prev.filter((r) => r._id !== id))
+  }, [])
+
+  return { reportes, estado, error, cargar, reintentar, agregar, quitar }
 }

@@ -14,6 +14,7 @@ export const REGEX_WHATSAPP = /^\+569\d{8}$/
 export const RADIO_MIN = 100
 export const RADIO_MAX = 5000
 export const RADIO_DEFAULT = 1000
+export const DIMENSIONES_EMBEDDING = 512
 
 function esPerdido() {
   return this.tipo === 'PERDIDO'
@@ -99,8 +100,16 @@ const reporteSchema = new Schema(
         message: `El radio de búsqueda debe estar entre ${RADIO_MIN} m y ${RADIO_MAX / 1000} km.`,
       },
     },
-    // Vector de la IA (Fase 3). Nunca se envía al frontend.
-    embedding: { type: [Number], select: false, default: undefined },
+    // Vector CLIP (512, normalizado L2) para coincidencias. Nunca se envía al frontend.
+    embedding: {
+      type: [Number],
+      select: false,
+      default: undefined,
+      validate: {
+        validator: (v) => v == null || v.length === 0 || v.length === DIMENSIONES_EMBEDDING,
+        message: `El embedding debe tener ${DIMENSIONES_EMBEDDING} dimensiones.`,
+      },
+    },
     createdAt: { type: Date, default: Date.now, immutable: true },
   },
   {
